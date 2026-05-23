@@ -124,6 +124,11 @@ enum sendsignon_e
 	PRESPAWN_FLUSH=1,
 	PRESPAWN_SIGNONBUFS,
 	PRESPAWN_SIGNONMSG,
+        // fragfix
+	PRESPAWN_HEAD,
+	PRESPAWN_MDL,
+	PRESPAWN_SND,
+	PRESPAWN_TAIL,
 };
 
 typedef struct client_s
@@ -161,6 +166,7 @@ typedef struct client_s
 	int				oldstats_i[MAX_CL_STATS];		//previous values of stats. if these differ from the current values, reflag resendstats.
 	float			oldstats_f[MAX_CL_STATS];		//previous values of stats. if these differ from the current values, reflag resendstats.
 	char			*oldstats_s[MAX_CL_STATS];
+        const char		**s;                            // fragfix - this was copied out of SV_SendServerinfo and put here to allow sound and model precaches to be sent over multiple frames.
 } client_t;
 
 

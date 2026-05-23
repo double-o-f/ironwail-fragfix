@@ -456,6 +456,112 @@ void SV_SendServerinfo (client_t *client)
 	client->spawned = false;		// need prespawn, spawn, etc
 }
 
+
+void SV_SendServerinfoHead (client_t *client)
+{
+        printf("head\n");
+	//const char		**s;
+	char			message[2048];
+	//int				i; //johnfitz
+
+	MSG_WriteByte (&client->message, svc_print);
+	sprintf (message, "%c\nFITZQUAKE %1.2f SERVER (%i CRC)\n", 2, FITZQUAKE_VERSION, qcvm->crc); //johnfitz -- include fitzquake version
+	MSG_WriteString (&client->message,message);
+
+	MSG_WriteByte (&client->message, svc_serverinfo_head);
+	MSG_WriteLong (&client->message, sv.protocol); //johnfitz -- sv.protocol instead of PROTOCOL_VERSION
+	
+	if (sv.protocol == PROTOCOL_RMQ)
+	{
+		// mh - now send protocol flags so that the client knows the protocol features to expect
+		MSG_WriteLong (&client->message, sv.protocolflags);
+	}
+	
+	MSG_WriteByte (&client->message, svs.maxclients);
+
+	if (!coop.value && deathmatch.value)
+		MSG_WriteByte (&client->message, GAME_DEATHMATCH);
+	else
+		MSG_WriteByte (&client->message, GAME_COOP);
+
+	MSG_WriteString (&client->message, PR_GetString(qcvm->edicts->v.message));
+
+	client->sendsignon = PRESPAWN_HEAD;
+	client->spawned = false;		// need prespawn, spawn, etc
+
+        client->s = sv.model_precache+1;        // get s ready for model precache loop
+}
+
+void SV_SendServerinfoMDL (client_t *client)
+{
+        printf("mdl\n");
+	//const char		**s;
+	//char			message[2048];
+	//int				i; //johnfitz
+
+	MSG_WriteByte (&client->message, svc_serverinfo_mdl);
+
+	for ( ; *client->s; client->s++) {
+		if (client->message.cursize + MAX_QPATH + 1 > client->message.maxsize) {        // if we run out of room, send more models in next packet
+                        printf("cursize %i\n", client->message.cursize);
+                        MSG_WriteByte (&client->message, 0);
+                        return;
+                }
+		MSG_WriteString (&client->message, *client->s);
+        }
+	MSG_WriteByte (&client->message, 0);
+
+	client->sendsignon = PRESPAWN_SND;
+
+        client->s = sv.sound_precache+1;        // get s ready for sound precache loop
+}
+
+void SV_SendServerinfoSND (client_t *client)
+{
+        printf("snd\n");
+	//const char		**s;
+	//char			message[2048];
+	//int				i; //johnfitz
+
+	MSG_WriteByte (&client->message, svc_serverinfo_snd);
+
+	for ( ; *client->s; client->s++) {
+		if (client->message.cursize + MAX_QPATH + 1 > client->message.maxsize) {        // if we run out of room, send more sounds in next packet
+                        MSG_WriteByte (&client->message, 0);
+                        return;
+                }
+	    	MSG_WriteString (&client->message, *client->s);
+        }
+	MSG_WriteByte (&client->message, 0);
+
+	client->sendsignon = PRESPAWN_TAIL;
+}
+
+void SV_SendServerinfoTail (client_t *client)
+{
+        printf("tail\n");
+	//const char		**s;
+	//char			message[2048];
+	//int				i; //johnfitz
+
+	MSG_WriteByte (&client->message, svc_serverinfo_tail);
+
+// send music
+	MSG_WriteByte (&client->message, svc_cdtrack);
+	MSG_WriteByte (&client->message, qcvm->edicts->v.sounds);
+	MSG_WriteByte (&client->message, qcvm->edicts->v.sounds);
+
+// set view
+	MSG_WriteByte (&client->message, svc_setview);
+	MSG_WriteShort (&client->message, NUM_FOR_EDICT(client->edict));
+
+	MSG_WriteByte (&client->message, svc_signonnum);
+	MSG_WriteByte (&client->message, 1);
+
+	client->sendsignon = PRESPAWN_FLUSH;
+}
+
+
 /*
 ================
 SV_ConnectClient
@@ -494,7 +600,6 @@ void SV_ConnectClient (int clientnum)
 	client->spawned = false;
 	client->edict = ent;
 	client->message.data = client->msgbuf;
-	client->message.maxsize = sizeof(client->msgbuf);
 	client->message.allowoverflow = true;		// we can catch it
 
 	if (sv.loadgame)
@@ -507,7 +612,16 @@ void SV_ConnectClient (int clientnum)
 			client->spawn_parms[i] = (&pr_global_struct->parm1)[i];
 	}
 
-	SV_SendServerinfo (client);
+	// fragfix - if client is not local split server info across multiple packets
+	if (!SV_IsLocalClient (client)) {
+	        client->message.maxsize = DATAGRAM_MTU;
+                SV_SendServerinfoHead (client);
+        }
+        else {
+	        client->message.maxsize = sizeof(client->msgbuf);
+	        SV_SendServerinfo (client);
+        }
+        // fragfix
 }
 
 
@@ -1188,7 +1302,7 @@ qboolean SV_SendClientDatagram (client_t *client)
 	msg.cursize = 0;
 
 	//johnfitz -- if client is nonlocal, use smaller max size so packets aren't fragmented
-	if (Q_strcmp(NET_QSocketGetAddressString(client->netconnection), "LOCAL") != 0)
+	if (!SV_IsLocalClient (client))
 		msg.maxsize = DATAGRAM_MTU;
 	//johnfitz
 
@@ -1370,6 +1484,7 @@ SV_SendClientMessages
 void SV_SendClientMessages (void)
 {
 	int			i;
+        qboolean                l;
 
 // update frags, names, etc
 	SV_UpdateToReliableMessages ();
@@ -1379,6 +1494,8 @@ void SV_SendClientMessages (void)
 	{
 		if (!host_client->active)
 			continue;
+
+    	        l = SV_IsLocalClient (host_client);
 
 		if (host_client->spawned)
 		{
@@ -1438,26 +1555,45 @@ void SV_SendClientMessages (void)
 			continue;
 		}
 
-		if (host_client->message.cursize || host_client->dropasap)
+		if (host_client->message.cursize || host_client->dropasap || !l)
 		{
-			if (!NET_CanSendMessage (host_client->netconnection))
-			{
-//				I_Printf ("can't write\n");
-				continue;
-			}
-
 			if (host_client->dropasap)
 				SV_DropClient (false);	// went to another level
-			else
+			else if (NET_CanSendMessage (host_client->netconnection))
 			{
+    	                        if (!l) {
+                                        if (host_client->sendsignon == PRESPAWN_HEAD) {
+                                                host_client->sendsignon = PRESPAWN_MDL;
+                                        }
+                                        else if (host_client->sendsignon == PRESPAWN_MDL) {
+                                                SV_SendServerinfoMDL (host_client);
+                                        }
+                                        else if (host_client->sendsignon == PRESPAWN_SND) {
+                                                SV_SendServerinfoSND (host_client);
+                                        }
+                                        else if (host_client->sendsignon == PRESPAWN_TAIL) {
+                                                SV_SendServerinfoTail (host_client);
+                                        }
+                                        else {
+				                //Con_Warning ("non prespawn local\n");
+                                                if (!host_client->message.cursize) continue;
+                                        }
+                                }
+
 				if (NET_SendMessage (host_client->netconnection
 				, &host_client->message) == -1)
 					SV_DropClient (true);	// if the message couldn't send, kick off
+
 				SZ_Clear (&host_client->message);
 				host_client->last_message = realtime;
 				if (host_client->sendsignon == PRESPAWN_FLUSH)
-					host_client->sendsignon = PRESPAWN_DONE;
+                                        host_client->sendsignon = PRESPAWN_DONE;
 			}
+                        else {
+//				I_Printf ("can't write\n");
+				Con_Warning ("can't write\n");
+				continue;
+                        }
 		}
 	}
 
@@ -1475,7 +1611,8 @@ SERVER SPAWNING
 ==============================================================================
 */
 
-#define SIGNON_SIZE		31500 // QS has a MAX_DATAGRAM of 32000, try to play nice
+//#define SIGNON_SIZE		31500 // QS has a MAX_DATAGRAM of 32000, try to play nice
+#define SIGNON_SIZE	        DATAGRAM_MTU
 
 /*
 ================
@@ -2071,8 +2208,18 @@ void SV_SpawnServer (const char *server)
 
 // send serverinfo to all connected clients
 	for (i=0,host_client = svs.clients ; i<svs.maxclients ; i++, host_client++)
-		if (host_client->active)
-			SV_SendServerinfo (host_client);
+		if (host_client->active) {
+			// fragfix - if client is not local split server info across multiple packets
+	                if (!SV_IsLocalClient (host_client)) {
+	                        host_client->message.maxsize = DATAGRAM_MTU;
+                                SV_SendServerinfoHead (host_client);
+                        }
+                        else {
+	                        host_client->message.maxsize = sizeof(host_client->msgbuf);
+	                        SV_SendServerinfo (host_client);
+                        }
+                        // fragfix
+                }
 
 	Con_DPrintf ("Server spawned.\n");
 

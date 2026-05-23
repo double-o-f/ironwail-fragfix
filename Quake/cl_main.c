@@ -829,8 +829,8 @@ void CL_SendCmd (void)
 	// send the unreliable message
 		CL_SendMove (&cmd);
 	}
-	else
-		CL_SendMove (NULL);
+	//else
+		//CL_SendMove (NULL); // fragfix - NULL sendmove crashes in debug mode
 	memset(&cl.pendingcmd, 0, sizeof(cl.pendingcmd));
 
 	if (cls.demoplayback)

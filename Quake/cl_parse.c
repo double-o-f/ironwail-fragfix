@@ -443,6 +443,221 @@ void CL_ParseServerInfo (void)
 
 /*
 ==================
+CL_ParseServerInfoHead
+==================
+*/
+int	ff_nummodels, ff_numsounds;
+char	ff_model_precache[MAX_MODELS][MAX_QPATH];
+char	ff_sound_precache[MAX_SOUNDS][MAX_QPATH];
+void CL_ParseServerInfoHead (void)
+{
+	const char	*str;
+	int		i;
+
+	Con_DPrintf ("Serverinfo packet received.\n");
+
+// ericw -- bring up loading plaque for map changes within a demo.
+//          it will be hidden in CL_SignonReply.
+	if (cls.demoplayback)
+		SCR_BeginLoadingPlaque();
+
+//
+// wipe the client_state_t struct
+//
+	CL_ClearState ();
+
+// parse protocol version number
+	i = MSG_ReadLong ();
+	//johnfitz -- support multiple protocols
+	if (i != 999) {
+		Con_Printf ("\n"); //because there's no newline after serverinfo print
+		Host_Error ("Server returned version %i not %i", i, 996);
+	}
+	cl.protocol = i;
+	//johnfitz
+
+	const unsigned int supportedflags = (PRFL_SHORTANGLE | PRFL_FLOATANGLE | PRFL_24BITCOORD | PRFL_FLOATCOORD | PRFL_EDICTSCALE | PRFL_INT32COORD);
+	
+	// mh - read protocol flags from server so that we know what protocol features to expect
+	cl.protocolflags = (unsigned int) MSG_ReadLong ();
+	
+	if (0 != (cl.protocolflags & (~supportedflags)))
+	{
+		Con_Warning("PROTOCOL_RMQ protocolflags %i contains unsupported flags\n", cl.protocolflags);
+	}
+
+// parse maxclients
+	cl.maxclients = MSG_ReadByte ();
+	if (cl.maxclients < 1 || cl.maxclients > MAX_SCOREBOARD)
+	{
+		Host_Error ("Bad maxclients (%u) from server", cl.maxclients);
+	}
+	cl.scores = (scoreboard_t *) Hunk_AllocName (cl.maxclients*sizeof(*cl.scores), "scores");
+
+// parse gametype
+	cl.gametype = MSG_ReadByte ();
+
+// parse signon message
+	str = MSG_ReadString ();
+	q_strlcpy (cl.levelname, str, sizeof(cl.levelname));
+
+// seperate the printfs so the server message can have a color
+	Con_Printf ("\n%s\n", Con_Quakebar(40)); //johnfitz
+	Con_Printf ("%c%s\n", 2, str);
+
+//johnfitz -- tell user which protocol this is
+	Con_Printf ("Using protocol %i\n", i);
+
+        ff_nummodels = 1;
+        ff_numsounds = 1;
+	//CL_KeepaliveMessage ();
+}
+
+/*
+==================
+CL_ParseServerInfoMDL
+==================
+*/
+void CL_ParseServerInfoMDL (void)
+{
+	const char	*str;
+	//int		i;
+	//int		nummodels, numsounds;
+	//char	model_precache[MAX_MODELS][MAX_QPATH];
+	//char	sound_precache[MAX_SOUNDS][MAX_QPATH];
+
+// first we go through and touch all of the precache data that still
+// happens to be in the cache, so precaching something else doesn't
+// needlessly purge it
+
+// precache models
+	memset (cl.model_precache, 0, sizeof(cl.model_precache));
+	for ( ; ; ff_nummodels++)
+	{
+		str = MSG_ReadString ();
+		if (!str[0])
+			break;
+		if (ff_nummodels == MAX_MODELS)
+		{
+			Host_Error ("Server sent too many model precaches");
+		}
+		q_strlcpy (ff_model_precache[ff_nummodels], str, MAX_QPATH);
+		Mod_TouchModel (str);
+	}
+
+	//CL_KeepaliveMessage ();
+}
+
+/*
+==================
+CL_ParseServerInfoSND
+==================
+*/
+void CL_ParseServerInfoSND (void)
+{
+	const char	*str;
+	//int		i;
+	//int		nummodels, numsounds;
+	//char	model_precache[MAX_MODELS][MAX_QPATH];
+	//char	sound_precache[MAX_SOUNDS][MAX_QPATH];
+
+	//johnfitz -- check for excessive models
+	if (ff_nummodels >= 2048)
+		Con_Warning ("%i models exceeds QS limit of 2048 (max = %d).\n", ff_nummodels, MAX_MODELS);
+	else if (ff_nummodels >= 256)
+		Con_DWarning ("%i models exceeds standard limit of 256 (max = %d).\n", ff_nummodels, MAX_MODELS);
+	//johnfitz
+
+// precache sounds
+	memset (cl.sound_precache, 0, sizeof(cl.sound_precache));
+	for ( ; ; ff_numsounds++)
+	{
+		str = MSG_ReadString ();
+		if (!str[0])
+			break;
+		if (ff_numsounds == MAX_SOUNDS)
+		{
+			Host_Error ("Server sent too many sound precaches");
+		}
+		q_strlcpy (ff_sound_precache[ff_numsounds], str, MAX_QPATH);
+		S_TouchSound (str);
+	}
+
+	//CL_KeepaliveMessage ();
+}
+
+/*
+==================
+CL_ParseServerInfoTail
+==================
+*/
+void CL_ParseServerInfoTail (void)
+{
+	//const char	*str;
+	int		i;
+	//int		nummodels, numsounds;
+	//char	model_precache[MAX_MODELS][MAX_QPATH];
+	//char	sound_precache[MAX_SOUNDS][MAX_QPATH];
+
+	//johnfitz -- check for excessive sounds
+	if (ff_numsounds >= 256)
+		Con_DWarning ("%i sounds exceeds standard limit of 256 (max = %d).\n", ff_numsounds, MAX_SOUNDS);
+	//johnfitz
+
+//
+// now we try to load everything else until a cache allocation fails
+//
+
+	// copy the naked name of the map file to the cl structure -- O.S
+	COM_StripExtension (COM_SkipPath(ff_model_precache[1]), cl.mapname, sizeof(cl.mapname));
+
+	for (i = 1; i < ff_nummodels; i++)
+	{
+                printf("mdl: %s\n", ff_model_precache[i]);
+		cl.model_precache[i] = Mod_ForName (ff_model_precache[i], false);
+		if (cl.model_precache[i] == NULL)
+		{
+			Host_Error ("Model %s not found", ff_model_precache[i]);
+		}
+		CL_KeepaliveMessage ();
+	}
+
+	S_BeginPrecaching ();
+	for (i = 1; i < ff_numsounds; i++)
+	{
+                printf("snd: %s\n", ff_sound_precache[i]);
+		cl.sound_precache[i] = S_PrecacheSound (ff_sound_precache[i]);
+		CL_KeepaliveMessage ();
+	}
+	S_EndPrecaching ();
+
+// local state
+	cl_entities[0].model = cl.worldmodel = cl.model_precache[1];
+
+	R_NewMap ();
+
+	//johnfitz -- clear out string; we don't consider identical
+	//messages to be duplicates if the map has changed in between
+	con_lastcenterstring[0] = 0;
+	//johnfitz
+
+	Hunk_Check ();		// make sure nothing is hurt
+
+	noclip_anglehack = false;		// noclip is turned off at start
+
+	warn_about_nehahra_protocol = true; //johnfitz -- warn about nehahra protocol hack once per server connection
+
+//johnfitz -- reset developer stats
+	memset(&dev_stats, 0, sizeof(dev_stats));
+	memset(&dev_peakstats, 0, sizeof(dev_peakstats));
+	memset(&dev_overflows, 0, sizeof(dev_overflows));
+}
+
+
+
+
+/*
+==================
 CL_ParseUpdate
 
 Parse an entity update message from the server
@@ -1381,6 +1596,22 @@ void CL_ParseServerMessage (void)
 			break;
 		case svc_localsound:
 			CL_ParseLocalSound();
+			break;
+
+		case svc_serverinfo_head:
+                        CL_ParseServerInfoHead ();
+			break;
+
+		case svc_serverinfo_mdl:
+                        CL_ParseServerInfoMDL ();
+			break;
+
+		case svc_serverinfo_snd:
+                        CL_ParseServerInfoSND ();
+			break;
+
+		case svc_serverinfo_tail:
+                        CL_ParseServerInfoTail ();
 			break;
 		}
 
