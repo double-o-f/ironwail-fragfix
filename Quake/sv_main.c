@@ -459,7 +459,6 @@ void SV_SendServerinfo (client_t *client)
 
 void SV_SendServerinfoHead (client_t *client)
 {
-        printf("head\n");
 	//const char		**s;
 	char			message[2048];
 	//int				i; //johnfitz
@@ -489,12 +488,11 @@ void SV_SendServerinfoHead (client_t *client)
 	client->sendsignon = PRESPAWN_HEAD;
 	client->spawned = false;		// need prespawn, spawn, etc
 
-        client->s = sv.model_precache+1;        // get s ready for model precache loop
+        client->s = sv.model_precache+1;        // fragfix - get s ready for model precache loop
 }
 
 void SV_SendServerinfoMDL (client_t *client)
 {
-        printf("mdl\n");
 	//const char		**s;
 	//char			message[2048];
 	//int				i; //johnfitz
@@ -503,7 +501,6 @@ void SV_SendServerinfoMDL (client_t *client)
 
 	for ( ; *client->s; client->s++) {
 		if (client->message.cursize + MAX_QPATH + 1 > client->message.maxsize) {        // if we run out of room, send more models in next packet
-                        printf("cursize %i\n", client->message.cursize);
                         MSG_WriteByte (&client->message, 0);
                         return;
                 }
@@ -513,12 +510,11 @@ void SV_SendServerinfoMDL (client_t *client)
 
 	client->sendsignon = PRESPAWN_SND;
 
-        client->s = sv.sound_precache+1;        // get s ready for sound precache loop
+        client->s = sv.sound_precache+1;        // fragfix - get s ready for sound precache loop
 }
 
 void SV_SendServerinfoSND (client_t *client)
 {
-        printf("snd\n");
 	//const char		**s;
 	//char			message[2048];
 	//int				i; //johnfitz
@@ -539,7 +535,6 @@ void SV_SendServerinfoSND (client_t *client)
 
 void SV_SendServerinfoTail (client_t *client)
 {
-        printf("tail\n");
 	//const char		**s;
 	//char			message[2048];
 	//int				i; //johnfitz
@@ -1484,7 +1479,6 @@ SV_SendClientMessages
 void SV_SendClientMessages (void)
 {
 	int			i;
-        qboolean                l;
 
 // update frags, names, etc
 	SV_UpdateToReliableMessages ();
@@ -1494,8 +1488,6 @@ void SV_SendClientMessages (void)
 	{
 		if (!host_client->active)
 			continue;
-
-    	        l = SV_IsLocalClient (host_client);
 
 		if (host_client->spawned)
 		{
@@ -1555,48 +1547,44 @@ void SV_SendClientMessages (void)
 			continue;
 		}
 
-		if (host_client->message.cursize || host_client->dropasap || !l)
-		{
-			if (host_client->dropasap)
-				SV_DropClient (false);	// went to another level
-			else if (NET_CanSendMessage (host_client->netconnection))
-			{
-    	                        if (!l) {
-                                        if (host_client->sendsignon == PRESPAWN_HEAD) {
-                                                host_client->sendsignon = PRESPAWN_MDL;
-                                        }
-                                        else if (host_client->sendsignon == PRESPAWN_MDL) {
-                                                SV_SendServerinfoMDL (host_client);
-                                        }
-                                        else if (host_client->sendsignon == PRESPAWN_SND) {
-                                                SV_SendServerinfoSND (host_client);
-                                        }
-                                        else if (host_client->sendsignon == PRESPAWN_TAIL) {
-                                                SV_SendServerinfoTail (host_client);
-                                        }
-                                        else {
-				                //Con_Warning ("non prespawn local\n");
-                                                if (!host_client->message.cursize) continue;
-                                        }
-                                }
-
-				if (NET_SendMessage (host_client->netconnection
-				, &host_client->message) == -1)
-					SV_DropClient (true);	// if the message couldn't send, kick off
-
-				SZ_Clear (&host_client->message);
-				host_client->last_message = realtime;
-				if (host_client->sendsignon == PRESPAWN_FLUSH)
-                                        host_client->sendsignon = PRESPAWN_DONE;
-			}
-                        else {
-//				I_Printf ("can't write\n");
-				Con_Warning ("can't write\n");
-				continue;
+                // fragfix - send next server info packet
+    	        if (host_client->sendsignon != PRESPAWN_DONE
+                && !SV_IsLocalClient (host_client)
+                && NET_CanSendMessage (host_client->netconnection)) {
+                        if (host_client->sendsignon == PRESPAWN_HEAD) {
+                                host_client->sendsignon = PRESPAWN_MDL;
                         }
-		}
-	}
+                        else if (host_client->sendsignon == PRESPAWN_MDL) {
+                                SV_SendServerinfoMDL (host_client);
+                        }
+                        else if (host_client->sendsignon == PRESPAWN_SND) {
+                                SV_SendServerinfoSND (host_client);
+                        }
+                        else if (host_client->sendsignon == PRESPAWN_TAIL) {
+                                SV_SendServerinfoTail (host_client);
+                        }
+                }
+                // fragfix
 
+		if (host_client->dropasap)
+			SV_DropClient (false);	// went to another level
+		else if (host_client->message.cursize)
+		{
+			if (NET_SendMessage (host_client->netconnection
+			, &host_client->message) == -1)
+				SV_DropClient (true);	// if the message couldn't send, kick off
+
+			SZ_Clear (&host_client->message);
+			host_client->last_message = realtime;
+			if (host_client->sendsignon == PRESPAWN_FLUSH)
+                                host_client->sendsignon = PRESPAWN_DONE;
+		}
+                else {
+//			I_Printf ("can't write\n");
+//			if (!NET_CanSendMessage (host_client->netconnection))
+//                                Con_Warning ("can't write\n");
+                }
+	}
 
 // clear muzzle flashes
 	SV_CleanupEnts ();

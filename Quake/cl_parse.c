@@ -613,7 +613,6 @@ void CL_ParseServerInfoTail (void)
 
 	for (i = 1; i < ff_nummodels; i++)
 	{
-                printf("mdl: %s\n", ff_model_precache[i]);
 		cl.model_precache[i] = Mod_ForName (ff_model_precache[i], false);
 		if (cl.model_precache[i] == NULL)
 		{
@@ -625,7 +624,6 @@ void CL_ParseServerInfoTail (void)
 	S_BeginPrecaching ();
 	for (i = 1; i < ff_numsounds; i++)
 	{
-                printf("snd: %s\n", ff_sound_precache[i]);
 		cl.sound_precache[i] = S_PrecacheSound (ff_sound_precache[i]);
 		CL_KeepaliveMessage ();
 	}
