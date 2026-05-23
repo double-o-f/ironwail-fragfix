@@ -307,6 +307,9 @@ void CL_ParseServerInfo (void)
 	//johnfitz -- support multiple protocols
 	if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ) {
 		Con_Printf ("\n"); //because there's no newline after serverinfo print
+                if (i == PROTOCOL_RMQ_FRAGFIX) {
+		        Con_Printf ("Wrong parse func for %i\n", PROTOCOL_RMQ_FRAGFIX);
+                }
 		Host_Error ("Server returned version %i, not %i or %i or %i", i, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
 	}
 	cl.protocol = i;
@@ -444,6 +447,8 @@ void CL_ParseServerInfo (void)
 /*
 ==================
 CL_ParseServerInfoHead
+
+This should only be used with PROTOCOL_RMQ_FRAGFIX
 ==================
 */
 int	ff_nummodels, ff_numsounds;
@@ -469,9 +474,9 @@ void CL_ParseServerInfoHead (void)
 // parse protocol version number
 	i = MSG_ReadLong ();
 	//johnfitz -- support multiple protocols
-	if (i != 999) {
+	if (i != PROTOCOL_RMQ_FRAGFIX) {
 		Con_Printf ("\n"); //because there's no newline after serverinfo print
-		Host_Error ("Server returned version %i not %i", i, 996);
+		Host_Error ("CL_ParseServerInfoHead: Server returned version %i not %i", i, PROTOCOL_RMQ_FRAGFIX);
 	}
 	cl.protocol = i;
 	//johnfitz
@@ -483,7 +488,7 @@ void CL_ParseServerInfoHead (void)
 	
 	if (0 != (cl.protocolflags & (~supportedflags)))
 	{
-		Con_Warning("PROTOCOL_RMQ protocolflags %i contains unsupported flags\n", cl.protocolflags);
+		Con_Warning("PROTOCOL_RMQ_FRAGFIX protocolflags %i contains unsupported flags\n", cl.protocolflags);
 	}
 
 // parse maxclients
@@ -516,6 +521,8 @@ void CL_ParseServerInfoHead (void)
 /*
 ==================
 CL_ParseServerInfoMDL
+
+This should only be used with PROTOCOL_RMQ_FRAGFIX
 ==================
 */
 void CL_ParseServerInfoMDL (void)
@@ -551,6 +558,8 @@ void CL_ParseServerInfoMDL (void)
 /*
 ==================
 CL_ParseServerInfoSND
+
+This should only be used with PROTOCOL_RMQ_FRAGFIX
 ==================
 */
 void CL_ParseServerInfoSND (void)
@@ -589,6 +598,8 @@ void CL_ParseServerInfoSND (void)
 /*
 ==================
 CL_ParseServerInfoTail
+
+This should only be used with PROTOCOL_RMQ_FRAGFIX
 ==================
 */
 void CL_ParseServerInfoTail (void)
@@ -687,7 +698,7 @@ void CL_ParseUpdate (int bits)
 	}
 
 	//johnfitz -- PROTOCOL_FITZQUAKE
-	if (cl.protocol == PROTOCOL_FITZQUAKE || cl.protocol == PROTOCOL_RMQ)
+	if (cl.protocol == PROTOCOL_FITZQUAKE || cl.protocol == PROTOCOL_RMQ || cl.protocol ==  PROTOCOL_RMQ_FRAGFIX)
 	{
 		if (bits & U_EXTEND1)
 			bits |= MSG_ReadByte() << 16;
@@ -799,7 +810,7 @@ void CL_ParseUpdate (int bits)
 	//johnfitz
 
 	//johnfitz -- PROTOCOL_FITZQUAKE and PROTOCOL_NEHAHRA
-	if (cl.protocol == PROTOCOL_FITZQUAKE || cl.protocol == PROTOCOL_RMQ)
+	if (cl.protocol == PROTOCOL_FITZQUAKE || cl.protocol == PROTOCOL_RMQ || cl.protocol ==  PROTOCOL_RMQ_FRAGFIX)
 	{
 		if (bits & U_ALPHA)
 			ent->alpha = MSG_ReadByte();
@@ -1357,8 +1368,8 @@ void CL_ParseServerMessage (void)
 		case svc_version:
 			i = MSG_ReadLong ();
 			//johnfitz -- support multiple protocols
-			if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ)
-				Host_Error ("Server returned version %i, not %i or %i or %i", i, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
+			if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ && i != PROTOCOL_RMQ_FRAGFIX)
+				Host_Error ("Server returned version %i, not %i or %i or %i or %i", i, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ, PROTOCOL_RMQ_FRAGFIX);
 			cl.protocol = i;
 			//johnfitz
 			break;

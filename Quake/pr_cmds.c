@@ -1623,7 +1623,7 @@ static void PF_makestatic (void)
 		if (ent->alpha != ENTALPHA_DEFAULT)
 			bits |= B_ALPHA;
 
-		if (sv.protocol == PROTOCOL_RMQ)
+		if (sv.protocol == PROTOCOL_RMQ || sv.protocol == PROTOCOL_RMQ_FRAGFIX)
 		{
 			eval_t* val;
 			val = GetEdictFieldValueByName(ent, "scale");

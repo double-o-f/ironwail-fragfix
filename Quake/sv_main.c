@@ -29,7 +29,7 @@ server_static_t	svs;
 
 static char	localmodels[MAX_MODELS][8];	// inline model names for precache
 
-int		sv_protocol = PROTOCOL_RMQ; //johnfitz
+int		sv_protocol = PROTOCOL_RMQ_FRAGFIX; //johnfitz
 
 extern cvar_t nomonsters;
 
@@ -113,8 +113,8 @@ void SV_Protocol_f (void)
 		break;
 	case 2:
 		i = atoi(Cmd_Argv(1));
-		if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ)
-			Con_Printf ("sv_protocol must be %i or %i or %i\n", PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
+		if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ && i != PROTOCOL_RMQ_FRAGFIX)
+			Con_Printf ("sv_protocol must be %i or %i or %i or %i\n", PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ, PROTOCOL_RMQ_FRAGFIX);
 		else
 		{
 			sv_protocol = i;
@@ -197,9 +197,12 @@ void SV_Init (void)
 	case PROTOCOL_RMQ:
 		p = "RMQ";
 		break;
+	case PROTOCOL_RMQ_FRAGFIX:
+		p = "RMQ_Fragfix";
+		break;
 	default:
-		Sys_Error ("Bad protocol version request %i. Accepted values: %i, %i, %i.",
-				sv_protocol, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
+		Sys_Error ("Bad protocol version request %i. Accepted values: %i, %i, %i, %i.",
+				sv_protocol, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ, PROTOCOL_RMQ_FRAGFIX);
 		return; /* silence compiler */
 	}
 	Sys_Printf ("Server using protocol %i (%s)\n", sv_protocol, p);
@@ -405,15 +408,25 @@ void SV_SendServerinfo (client_t *client)
 	const char		**s;
 	char			message[2048];
 	int				i; //johnfitz
+        int                     proto; // fragfix - when sending to local client serverinfo packet should use PROTOCOL_RMQ even when sv.protocol is PROTOCOL_RMQ_FRAGFIX
+
+        if (sv.protocol == PROTOCOL_RMQ_FRAGFIX) {
+	        if (!SV_IsLocalClient (client)) {
+		    Host_Error ("SV_SendServerinfo should not be called on non-local clients when using %i", PROTOCOL_RMQ_FRAGFIX);
+                }
+                proto = PROTOCOL_RMQ;
+        }
+        else
+            proto = sv.protocol;
 
 	MSG_WriteByte (&client->message, svc_print);
 	sprintf (message, "%c\nFITZQUAKE %1.2f SERVER (%i CRC)\n", 2, FITZQUAKE_VERSION, qcvm->crc); //johnfitz -- include fitzquake version
 	MSG_WriteString (&client->message,message);
 
 	MSG_WriteByte (&client->message, svc_serverinfo);
-	MSG_WriteLong (&client->message, sv.protocol); //johnfitz -- sv.protocol instead of PROTOCOL_VERSION
+	MSG_WriteLong (&client->message, proto); //johnfitz -- sv.protocol instead of PROTOCOL_VERSION
 	
-	if (sv.protocol == PROTOCOL_RMQ)
+	if (proto == PROTOCOL_RMQ)
 	{
 		// mh - now send protocol flags so that the client knows the protocol features to expect
 		MSG_WriteLong (&client->message, sv.protocolflags);
@@ -430,12 +443,12 @@ void SV_SendServerinfo (client_t *client)
 
 	//johnfitz -- only send the first 256 model and sound precaches if protocol is 15
 	for (i = 1, s = sv.model_precache+1; *s; s++,i++)
-		if (sv.protocol != PROTOCOL_NETQUAKE || i < 256)
+		if (proto != PROTOCOL_NETQUAKE || i < 256)
 			MSG_WriteString (&client->message, *s);
 	MSG_WriteByte (&client->message, 0);
 
 	for (i = 1, s = sv.sound_precache+1; *s; s++, i++)
-		if (sv.protocol != PROTOCOL_NETQUAKE || i < 256)
+		if (proto != PROTOCOL_NETQUAKE || i < 256)
 			MSG_WriteString (&client->message, *s);
 	MSG_WriteByte (&client->message, 0);
 	//johnfitz
@@ -468,13 +481,10 @@ void SV_SendServerinfoHead (client_t *client)
 	MSG_WriteString (&client->message,message);
 
 	MSG_WriteByte (&client->message, svc_serverinfo_head);
-	MSG_WriteLong (&client->message, sv.protocol); //johnfitz -- sv.protocol instead of PROTOCOL_VERSION
+	MSG_WriteLong (&client->message, PROTOCOL_RMQ_FRAGFIX);
 	
-	if (sv.protocol == PROTOCOL_RMQ)
-	{
-		// mh - now send protocol flags so that the client knows the protocol features to expect
-		MSG_WriteLong (&client->message, sv.protocolflags);
-	}
+	// mh - now send protocol flags so that the client knows the protocol features to expect
+	MSG_WriteLong (&client->message, sv.protocolflags);
 	
 	MSG_WriteByte (&client->message, svs.maxclients);
 
@@ -608,7 +618,7 @@ void SV_ConnectClient (int clientnum)
 	}
 
 	// fragfix - if client is not local split server info across multiple packets
-	if (!SV_IsLocalClient (client)) {
+	if (sv.protocol == PROTOCOL_RMQ_FRAGFIX && !SV_IsLocalClient (client)) {
 	        client->message.maxsize = DATAGRAM_MTU;
                 SV_SendServerinfoHead (client);
         }
@@ -1693,7 +1703,7 @@ void SV_CreateBaseline (void)
 			svent->baseline.modelindex = SV_ModelIndex(PR_GetString(svent->v.model));
 			svent->baseline.alpha = svent->alpha; //johnfitz -- alpha support
 			svent->baseline.scale = ENTSCALE_DEFAULT;
-			if (sv.protocol == PROTOCOL_RMQ)
+			if (sv.protocol == PROTOCOL_RMQ || sv.protocol == PROTOCOL_RMQ_FRAGFIX)
 			{
 				eval_t* val;
 				val = GetEdictFieldValueByName(svent, "scale");
@@ -2080,7 +2090,7 @@ void SV_SpawnServer (const char *server)
 
 	sv.protocol = sv_protocol; // johnfitz
 	
-	if (sv.protocol == PROTOCOL_RMQ)
+	if (sv.protocol == PROTOCOL_RMQ || sv.protocol == PROTOCOL_RMQ_FRAGFIX)
 	{
 		// set up the protocol flags used by this server
 		// (note - these could be cvar-ised so that server admins could choose the protocol features used by their servers)
@@ -2198,7 +2208,7 @@ void SV_SpawnServer (const char *server)
 	for (i=0,host_client = svs.clients ; i<svs.maxclients ; i++, host_client++)
 		if (host_client->active) {
 			// fragfix - if client is not local split server info across multiple packets
-	                if (!SV_IsLocalClient (host_client)) {
+	                if (sv.protocol == PROTOCOL_RMQ_FRAGFIX && !SV_IsLocalClient (host_client)) {
 	                        host_client->message.maxsize = DATAGRAM_MTU;
                                 SV_SendServerinfoHead (host_client);
                         }
