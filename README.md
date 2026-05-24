@@ -1,5 +1,5 @@
 # Why this fork?
-To make multiplayer over the internet with less hassle.
+To make multiplayer work over the internet with less hassle.
 
 When an RQM server is initializing a client, it sends a server info packet that typically exceeds the standard MTU of 1500 bytes causing fragmentation. This usually won't cause issues on LAN but when connecting over the internet most client's routers block ICMP fragmentation packets, so the server info packet fails to be reassembled and the client fails to finish initializing.
 
