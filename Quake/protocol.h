@@ -30,6 +30,14 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define PROTOCOL_RMQ		999
 #define PROTOCOL_RMQ_FRAGFIX	996 // fragfix - literally just RMQ but it splits up the server info packet
 
+/* fragfix
+When a NetQuake, FitzQuake, or RQM server is initializing a client, it sends a server
+info packet that typically exceeds the standard MTU of 1500 bytes causing fragmentation.
+This usually won't cause issues on LAN but when connecting over the internet some client's
+routers block ICMP fragmentation packets, so the server info packet fails to be reassembled
+and the client fails to finish initializing.
+*/
+
 // PROTOCOL_RMQ protocol flags
 #define PRFL_SHORTANGLE		(1 << 1)
 #define PRFL_FLOATANGLE		(1 << 2)

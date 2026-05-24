@@ -1,9 +1,7 @@
 # Why this fork?
-To fix multiplayer over the internet.
+To make multiplayer work over the internet with less hassle.
 
-When an RQM server is initializing a client, it sends a server info packet that typically exceeds the standard MTU of 1500 bytes causing fragmentation. This usually won't cause issues on LAN but when connecting over the internet most client's routers block ICMP fragmentation packets, so the server info packet fails to be reassembled and the client fails to finish initializing.
-
-This fork adds protocol 996 (RMQ_Fragfix) which splits server info across multiple packets to avoid fragmentation. You can switch between 996 and Ironwail’s other supported protocols with sv_protocol.
+This fork adds protocol 996 which is just 999 but it splits server info across multiple packets to avoid packet fragmentation. You can switch between 996 and Ironwail’s other supported protocols with sv_protocol.
 
 When using 996 the server will also only communicate with clients using ports 50001-50004 so they need to be forwarded along with the normal Quake port (26000). If you increase the max players the server will use higher ports e.g. 50001-50008 with a max of 8.
 
