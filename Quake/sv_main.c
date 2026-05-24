@@ -408,25 +408,16 @@ void SV_SendServerinfo (client_t *client)
 	const char		**s;
 	char			message[2048];
 	int				i; //johnfitz
-        int                     proto; // fragfix - when sending to local client serverinfo packet should use PROTOCOL_RMQ even when sv.protocol is PROTOCOL_RMQ_FRAGFIX
 
-        if (sv.protocol == PROTOCOL_RMQ_FRAGFIX) {
-	        if (!SV_IsLocalClient (client)) {
-		    Host_Error ("SV_SendServerinfo should not be called on non-local clients when using %i", PROTOCOL_RMQ_FRAGFIX);
-                }
-                proto = PROTOCOL_RMQ;
-        }
-        else
-            proto = sv.protocol;
 
 	MSG_WriteByte (&client->message, svc_print);
 	sprintf (message, "%c\nFITZQUAKE %1.2f SERVER (%i CRC)\n", 2, FITZQUAKE_VERSION, qcvm->crc); //johnfitz -- include fitzquake version
 	MSG_WriteString (&client->message,message);
 
 	MSG_WriteByte (&client->message, svc_serverinfo);
-	MSG_WriteLong (&client->message, proto); //johnfitz -- sv.protocol instead of PROTOCOL_VERSION
+	MSG_WriteLong (&client->message, sv.protocol); //johnfitz -- sv.protocol instead of PROTOCOL_VERSION
 	
-	if (proto == PROTOCOL_RMQ)
+	if (sv.protocol == PROTOCOL_RMQ || sv.protocol == PROTOCOL_RMQ_FRAGFIX)
 	{
 		// mh - now send protocol flags so that the client knows the protocol features to expect
 		MSG_WriteLong (&client->message, sv.protocolflags);
@@ -443,12 +434,12 @@ void SV_SendServerinfo (client_t *client)
 
 	//johnfitz -- only send the first 256 model and sound precaches if protocol is 15
 	for (i = 1, s = sv.model_precache+1; *s; s++,i++)
-		if (proto != PROTOCOL_NETQUAKE || i < 256)
+		if (sv.protocol != PROTOCOL_NETQUAKE || i < 256)
 			MSG_WriteString (&client->message, *s);
 	MSG_WriteByte (&client->message, 0);
 
 	for (i = 1, s = sv.sound_precache+1; *s; s++, i++)
-		if (proto != PROTOCOL_NETQUAKE || i < 256)
+		if (sv.protocol != PROTOCOL_NETQUAKE || i < 256)
 			MSG_WriteString (&client->message, *s);
 	MSG_WriteByte (&client->message, 0);
 	//johnfitz

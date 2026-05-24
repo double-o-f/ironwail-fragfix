@@ -305,17 +305,14 @@ void CL_ParseServerInfo (void)
 // parse protocol version number
 	i = MSG_ReadLong ();
 	//johnfitz -- support multiple protocols
-	if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ) {
+	if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ && i != PROTOCOL_RMQ_FRAGFIX) {
 		Con_Printf ("\n"); //because there's no newline after serverinfo print
-                if (i == PROTOCOL_RMQ_FRAGFIX) {
-		        Con_Printf ("Wrong parse func for %i\n", PROTOCOL_RMQ_FRAGFIX);
-                }
-		Host_Error ("Server returned version %i, not %i or %i or %i", i, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
+		Host_Error ("Server returned version %i, not %i or %i or %i or %i", i, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ, PROTOCOL_RMQ_FRAGFIX);
 	}
 	cl.protocol = i;
 	//johnfitz
 
-	if (cl.protocol == PROTOCOL_RMQ)
+	if (cl.protocol == PROTOCOL_RMQ || cl.protocol == PROTOCOL_RMQ_FRAGFIX)
 	{
 		const unsigned int supportedflags = (PRFL_SHORTANGLE | PRFL_FLOATANGLE | PRFL_24BITCOORD | PRFL_FLOATCOORD | PRFL_EDICTSCALE | PRFL_INT32COORD);
 		
