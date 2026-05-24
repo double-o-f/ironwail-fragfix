@@ -1064,7 +1064,12 @@ static qsocket_t *_Datagram_CheckNewConnections (void)
 	}
 
 	// allocate a network socket
-	newsock = dfunc.Open_Socket(0);
+	Con_Printf("sock.id %i\n", sock->id);
+	if (sv.protocol == PROTOCOL_RMQ_FRAGFIX)
+	    newsock = dfunc.Open_Socket(50000 + sock->id);
+        else
+	    newsock = dfunc.Open_Socket(0);
+	//newsock = dfunc.Open_Socket(50000 + svs.maxclientslimit - sock->id - 2);
 	if (newsock == INVALID_SOCKET)
 	{
 		NET_FreeQSocket(sock);

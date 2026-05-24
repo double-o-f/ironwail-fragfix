@@ -157,6 +157,8 @@ typedef struct qsocket_s
 	struct qsockaddr	addr;
 	char		address[NET_NAMELEN];
 
+        int             id; // fragfix
+
 } qsocket_t;
 
 extern qsocket_t	*net_activeSockets;
